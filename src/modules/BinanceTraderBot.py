@@ -7,22 +7,23 @@ import math
 
 from dotenv import load_dotenv
 import pandas as pd
+from tinydb import TinyDB, Query
 from binance.client import Client
 from binance.enums import *
 from binance.enums import SIDE_SELL, ORDER_TYPE_STOP_LOSS_LIMIT
 from binance.exceptions import BinanceAPIException
 
-from modules.BinanceClient import BinanceClient
-from modules.TraderOrder import TraderOrder
-from modules.Logger import *
+from src.modules.BinanceClient import BinanceClient
+from src.modules.TraderOrder import TraderOrder
+from src.modules.Logger import *
 
-from modules.StrategyRunner import StrategyRunner
+from src.modules.StrategyRunner import StrategyRunner
 
 
-from strategies.moving_average_antecipation import getMovingAverageAntecipationTradeStrategy
-from strategies.moving_average import getMovingAverageTradeStrategy
+from src.strategies.moving_average_antecipation import getMovingAverageAntecipationTradeStrategy
+from src.strategies.moving_average import getMovingAverageTradeStrategy
 
-from indicators import Indicators
+from src.indicators import Indicators
 # fmt: on
 
 
@@ -32,30 +33,24 @@ secret_key = os.getenv("BINANCE_SECRET_KEY")
 
 
 # ------------------------------------------------------------------
+# Bases de Dados
+DB_TRAILING = "src/database/trailing_db.json"  # arquivo JSON onde TinyDB irá persistir os estados
+DB_TRAILING_TABLE_NAME = "trailing"
 
 
+# ------------------------------------------------------------------
 # Classe Principal
 class BinanceTraderBot:
 
     # --------------------------------------------------------------
-    # Parâmetros da classe sem valor inicial
-    last_trade_decision = None  # Última decisão de posição (False = Vender | True = Comprar)
-    last_buy_price = 0  # Último valor de ordem de COMPRA executado
-    last_sell_price = 0  # Ùltimo valor de ordem de VENDA executada
-    open_orders = []
-    # Valor que já foi executado e que será descontado da quantidade,
-    # caso uma ordem não seja completamente executada
-    partial_quantity_discount = 0
-
     tick_size: float
     step_size: float
-    take_profit_index = 0
 
     # Construtor
     def __init__(
         self,
-        stock_code,
-        operation_code,
+        base_stock,
+        quote_stock,
         traded_quantity,
         traded_percentage,
         candle_period,
@@ -67,9 +62,15 @@ class BinanceTraderBot:
         take_profit_at_percentage=[],
         take_profit_amount_percentage=[],
         main_strategy=None,
-        main_strategy_args=None,
+        main_strategy_args={},
         fallback_strategy=None,
-        fallback_strategy_args=None,
+        fallback_strategy_args={},
+        execute_market_orders=False,
+        trailing_stop_percent=100,
+        trailing_stop_enabled=False,
+        pause_after_take_profit=False,
+        pause_after_stop_loss=False,
+        pause_after_trailing_stop=False,
     ):
 
         print("------------------------------------------------")
@@ -77,8 +78,9 @@ class BinanceTraderBot:
 
         # fmt: off
 
-        self.stock_code = stock_code  # Código princial da stock negociada (ex: 'BTC')
-        self.operation_code = operation_code  # Código negociado/moeda (ex:'BTCBRL')
+        self.base_stock = base_stock  # Código base da stock negociada (ex: 'BTC')
+        self.quote_stock = quote_stock # Código da moeda cotada (ex: 'USDT')
+        self.operation_code = f'{base_stock}{quote_stock}' # Código negociado/moeda (ex:'BTCBRL')
         self.traded_quantity = traded_quantity  # Quantidade incial que será operada
         self.traded_percentage = traded_percentage  # Porcentagem do total da carteira, que será negociada        
         self.candle_period = candle_period  # Período levado em consideração para operação (ex: 15min)        
@@ -94,7 +96,7 @@ class BinanceTraderBot:
         self.main_strategy_args = main_strategy_args # (opcional) Argumentos da estratégia principal
         self.fallback_strategy = fallback_strategy # (opcional) Estratégia de Fallback
         self.fallback_strategy_args = fallback_strategy_args # (opcional) Argumentos da estratégia de fallback
-
+        
         # Configurações de tempos de espera
         self.time_to_trade = time_to_trade
         self.delay_after_order = delay_after_order
@@ -106,7 +108,39 @@ class BinanceTraderBot:
 
         self.setStepSizeAndTickSize() # Seta o time_step e step_size da classe (só precisa executar 1x)
 
-        # fmt: on
+        # Dados limpos antes do updateAllData chamada em execute()
+        self.account_data = None
+        self.last_stock_account_balance = 0.0
+        self.actual_trade_position = None #
+        self.stock_data = None
+        self.open_orders = []
+        self.last_trade_decision = None  # Última decisão de posição (False = Vender | True = Comprar)
+        self.last_buy_price = 0.0 # Último valor de ordem de COMPRA executado
+        self.last_sell_price = 0.0 # Último valor de ordem de VENDA executada
+        self.take_profit_index = 0       
+        self.partial_quantity_discount = 0  # Valor que já foi executado e que será descontado da quantidade, caso uma ordem não seja completamente executada
+
+        # 1.5
+        self.execute_market_orders = execute_market_orders  # Define se o bot irá executar ordens de mercado (se False, ele executa ordens limitadas)
+        
+        self.pause_bot_state = False  # Define se o bot está pausado
+        self.pause_after_take_profit = pause_after_take_profit      # Define se o bot deve pausar após atingir o take profit
+        self.pause_after_stop_loss = pause_after_stop_loss          # Define se o bot deve pausar após atingir o stop loss
+        self.pause_after_trailing_stop = pause_after_trailing_stop  # Define se o bot deve pausar após atingir o trailing stop
+
+        # Trailing Stop - Configuração e Estado
+        self.trailing_stop_percent = max(trailing_stop_percent / 100, 0.0001)  # Porcentagem abaixo da máxima comprada que vende
+        self.trailing_stop_enabled = trailing_stop_enabled  # Configuração do usuário: quer usar trailing stop?
+        self.trailing_is_running = False  # Estado atual: trailing stop está funcionando agora?
+        self.db = TinyDB(DB_TRAILING)
+        self.trailing_table = self.db.table(DB_TRAILING_TABLE_NAME)
+        self.max_price_since_buy = 0.0
+        self.trailing_stop_price = 0.0
+        self.last_buy_price_for_trailing = 0.0
+        self.last_buy_time = None  # Timestamp da última compra executada
+        self.load_trailing_state() # Carrega o estado do trailing caso exista
+
+    # fmt: on
 
     # Atualiza todos os dados da conta
     # Função importante, sempre incrementar ela, em caso de novos gets
@@ -132,6 +166,9 @@ class BinanceTraderBot:
             # Se a posição atual for vendida, ele reseta o index do take profit
             if self.actual_trade_position == False:
                 self.take_profit_index = 0
+            # Reseta o trailing stop se a posição for vendida
+            if self.actual_trade_position == False:
+                self.reset_trailing_state()
 
         except BinanceAPIException as e:
             print(f"Erro na atualização de dados: {e}")
@@ -146,13 +183,12 @@ class BinanceTraderBot:
     # Busca o último balanço da conta, na stock escolhida.
     def getLastStockAccountBalance(self):
         for stock in self.account_data["balances"]:
-            if stock["asset"] == self.stock_code:
+            if stock["asset"] == self.base_stock:
                 free = float(stock["free"])
                 locked = float(stock["locked"])
                 in_wallet_amount = free + locked
         return float(in_wallet_amount)
 
-    # Checa se a posição atual é comprado ou vendido
     # Checa se a posição atual é comprado ou vendido
     def getActualTradePosition(self):
         """
@@ -240,11 +276,10 @@ class BinanceTraderBot:
         prices["open_time"] = pd.to_datetime(
             prices["open_time"],
             unit="ms",
-        ).dt.tz_localize("UTC")
-
-        # Converte para o fuso horário UTC -3
-        prices["open_time"] = prices["open_time"].dt.tz_convert("America/Sao_Paulo")
-
+            utc=True,  # já cria como tz-aware UTC
+        )
+        # Se quiser converter para outro timezone para exibição, use tz_convert
+        # prices["open_time"] = prices["open_time"].dt.tz_convert("America/Sao_Paulo")
         # CÁLCULOS PRÉVIOS...
 
         return prices
@@ -288,7 +323,7 @@ class BinanceTraderBot:
                 return last_buy_price
             else:
                 if verbose:
-                    print(f"Não há ordens de COMPRA executadas para {self.operation_code}.")
+                    print(f"\nNão há ordens de COMPRA executadas para {self.operation_code}.")
                 return 0.0
 
         except Exception as e:
@@ -334,7 +369,7 @@ class BinanceTraderBot:
                 return last_sell_price
             else:
                 if verbose:
-                    print(f"Não há ordens de VENDA executadas para {self.operation_code}.")
+                    print(f"\nNão há ordens de VENDA executadas para {self.operation_code}.")
                 return 0.0
 
         except Exception as e:
@@ -441,7 +476,7 @@ class BinanceTraderBot:
     # Printa o ativo definido na classe
     def printStock(self):
         for stock in self.account_data["balances"]:
-            if stock["asset"] == self.stock_code:
+            if stock["asset"] == self.base_stock:
                 print(stock)
 
     def printBrl(self):
@@ -485,7 +520,7 @@ class BinanceTraderBot:
     # Retorna todo o ativo definido na classe
     def getStock(self):
         for stock in self.account_data["balances"]:
-            if stock["asset"] == self.stock_code:
+            if stock["asset"] == self.base_stock:
                 return stock
 
     def getPriceChangePercentage(self, initial_price, close_price):
@@ -501,38 +536,36 @@ class BinanceTraderBot:
     # Compra a ação a MERCADO
     def buyMarketOrder(self, quantity=None):
         try:
-            if not self.actual_trade_position:  # Se a posição for vendida
-
-                if quantity == None:  # Se não definida, ele vende tudo na carteira
-                    quantity = self.adjust_to_step(
-                        self.last_stock_account_balance,
-                        self.step_size,
-                        as_string=True,
-                    )
-                else:  # Se não, ele ajusta o valor passado
-                    quantity = self.adjust_to_step(
-                        quantity,
-                        self.step_size,
-                        as_string=True,
-                    )
-
-                order_buy = self.client_binance.create_order(
-                    symbol=self.operation_code,
-                    side=SIDE_BUY,  # Compra
-                    type=ORDER_TYPE_MARKET,  # Ordem de Mercado
-                    quantity=quantity,
+            if quantity == None:  # Se não definida, ele compra a traded_quantity - o que já foi executado
+                quantity = self.adjust_to_step(
+                    self.traded_quantity - self.partial_quantity_discount,
+                    self.step_size,
+                    as_string=True,
+                )
+            else:  # Se não, ele ajusta o valor passado
+                quantity = self.adjust_to_step(
+                    quantity,
+                    self.step_size,
+                    as_string=True,
                 )
 
-                self.actual_trade_position = True  # Define posição como comprada
-                createLogOrder(order_buy)  # Cria um log
-                print(f"\nOrdem de COMPRA a mercado enviada com sucesso:")
-                print(order_buy)
-                return order_buy  # Retorna a ordem
+            order_buy = self.client_binance.create_order(
+                symbol=self.operation_code,
+                side=SIDE_BUY,  # Compra
+                type=ORDER_TYPE_MARKET,  # Ordem de Mercado
+                quantity=quantity,
+            )
 
-            else:  # Se a posição já está comprada
-                logging.warning("Erro ao comprar: Posição já comprada.")
-                print("\nErro ao comprar: Posição já comprada.")
-                return False
+            # Registra o timestamp da compra para o trailing stop
+            if order_buy and order_buy.get("status") == "FILLED":
+                self.last_buy_time = pd.Timestamp.utcnow()  # UTC
+                self.save_trailing_state()
+
+            self.actual_trade_position = True  # Define posição como comprada
+            createLogOrder(order_buy)  # Cria um log
+            print(f"\nOrdem de COMPRA a mercado enviada com sucesso:")
+            print(order_buy)
+            return order_buy  # Retorna a ordem
 
         except Exception as e:
             logging.error(f"Erro ao executar ordem de compra a mercado: {e}")
@@ -591,6 +624,12 @@ class BinanceTraderBot:
                 quantity=quantity,
                 price=limit_price,
             )
+
+            # Registra o timestamp da compra para o trailing stop (apenas se totalmente executada)
+            if order_buy and order_buy.get("status") == "FILLED":
+                self.last_buy_time = pd.Timestamp.utcnow()  # UTC
+                self.save_trailing_state()
+
             self.actual_trade_position = True  # Atualiza a posição para comprada
             print(f"\nOrdem COMPRA limitada enviada com sucesso:")
             # print(order_buy)
@@ -799,7 +838,7 @@ class BinanceTraderBot:
                 print(f" - Maior preço parcialmente executado: {self.last_buy_price}")
                 return True
             else:
-                print(f" - Não há ordens de compra abertas para {self.operation_code}.")
+                print(f"\n - Não há ordens de compra abertas para {self.operation_code}.")
                 return False
 
         except Exception as e:
@@ -841,6 +880,57 @@ class BinanceTraderBot:
             return False
 
     # --------------------------------------------------------------
+    # MÉTODOS TRAILING STOP
+    # Salva o estado do trailing stop no banco de dados
+
+    def save_trailing_state(self):
+        Trailing = Query()
+        self.trailing_table.upsert(
+            {
+                "operation_code": self.operation_code,
+                "max_price_since_buy": self.max_price_since_buy,
+                "trailing_stop_price": self.trailing_stop_price,
+                "last_buy_price_for_trailing": getattr(self, "last_buy_price_for_trailing", 0.0),
+                "trailing_is_running": self.trailing_is_running,  # Estado real do trailing
+                "last_buy_time": self.last_buy_time.isoformat() if self.last_buy_time is not None else None,
+            },
+            Trailing.operation_code == self.operation_code,
+        )
+
+    def load_trailing_state(self):
+        Trailing = Query()
+        record = self.trailing_table.get(Trailing.operation_code == self.operation_code)
+        if record:
+            self.max_price_since_buy = record.get("max_price_since_buy", 0.0)
+            self.trailing_stop_price = record.get("trailing_stop_price", 0.0)
+            self.last_buy_price_for_trailing = record.get("last_buy_price_for_trailing", 0.0)
+            self.trailing_is_running = record.get("trailing_is_running", False)  # Carrega estado real
+            # Carrega last_buy_time se existir
+            last_buy_time_str = record.get("last_buy_time", None)
+            if last_buy_time_str:
+                try:
+                    self.last_buy_time = pd.Timestamp(last_buy_time_str).tz_localize("UTC") if last_buy_time_str else None
+                except:
+                    self.last_buy_time = None
+            else:
+                self.last_buy_time = None
+        else:
+            self.max_price_since_buy = 0.0
+            self.trailing_stop_price = 0.0
+            self.last_buy_price_for_trailing = 0.0
+            self.trailing_is_running = False  # Estado inicial: não está rodando
+            self.last_buy_time = None
+
+    def reset_trailing_state(self):
+        Trailing = Query()
+        self.trailing_table.remove(Trailing.operation_code == self.operation_code)
+        self.max_price_since_buy = 0.0
+        self.trailing_stop_price = 0.0
+        self.last_buy_price_for_trailing = 0.0
+        self.trailing_is_running = False  # Reset do estado
+        self.last_buy_time = None
+
+    # --------------------------------------------------------------
     # ESTRATÉGIAS DE DECISÃO
 
     # Função que executa estratégias implementadas e retorna a decisão final
@@ -869,7 +959,7 @@ class BinanceTraderBot:
 
         print(f'\n - Preço atual: {self.stock_data["close_price"].iloc[-1]}')
         print(f" - Preço mínimo para vender: {self.getMinimumPriceToSell()}")
-        print(f" - Stop Loss em: {stop_loss_price:.4f} (-{self.stop_loss_percentage*100:.2f}%)\n")
+        print(f" - Stop Loss em: {stop_loss_price:.4f} (-{self.stop_loss_percentage*100:.2f}%)")
 
         if close_price < stop_loss_price and weighted_price < stop_loss_price and self.actual_trade_position == True:
             print("🔴 Ativando STOP LOSS...")
@@ -894,7 +984,10 @@ class BinanceTraderBot:
             # Calcula a variação percentual do preço
             price_percentage_variation = self.getPriceChangePercentage(initial_price=self.last_buy_price, close_price=close_price)
 
-            print(f" - Variação atual: {price_percentage_variation:.2f}%")
+            if price_percentage_variation >= 0:
+                print(f"\n📈 Variação atual: {price_percentage_variation:.2f}%\n")
+            else:
+                print(f"\n📉 Variação atual: {price_percentage_variation:.2f}%\n")
 
             # Verifica se o índice atual está dentro do tamanho da lista de take profit
             if self.take_profit_index < len(self.take_profit_at_percentage):
@@ -918,7 +1011,7 @@ class BinanceTraderBot:
                             f"🎯 Meta de Take Profit atingida! ({tp_percentage}% lucro)\n"
                             f" - Vendendo {tp_amount}% da carteira...\n"
                             f" - Preço atual: {close_price:.4f}\n"
-                            f" - Quantidade vendida: {quantity_to_sell:.6f} {self.stock_code}"
+                            f" - Quantidade vendida: {quantity_to_sell:.6f} {self.base_stock}"
                         )
 
                         print(log)
@@ -942,13 +1035,112 @@ class BinanceTraderBot:
                         return False  # Retorna False pois não conseguiu executar a venda
 
             else:
-                print("ℹ️ Todas as metas de take profit já foram atingidas.")
+                print("ℹ️  Todas as metas de take profit já foram atingidas.")
                 return False  # Retorna False se todas as metas já foram atingidas
 
         except Exception as e:
             logging.error(f"Erro no take profit: {e}")
             print(f"❌ Erro no take profit: {e}")
             return False  # Retorna False se houver erro
+
+    # Estratégia de venda por "Trailing Stop"
+    def trailingStopTrigger(self):
+        """
+        Ativa ou atualiza o trailing stop enquanto a posição está comprada.
+        Se o preço cair e atingir o trailing stop, vende a mercado.
+        Utiliza o preço máximo (high) atingido desde a compra.
+        """
+        try:
+            # Verifica se o usuário quer usar trailing stop
+            if not self.trailing_stop_enabled:
+                return False
+
+            if not self.actual_trade_position:  # Só faz trailing se estiver comprado
+                self.trailing_is_running = False
+                self.max_price_since_buy = 0.0
+                self.trailing_stop_price = 0.0
+                self.last_buy_price_for_trailing = 0.0
+                self.last_buy_time = None
+                self.save_trailing_state()
+                print("[TRAILING] Não está comprado. Trailing stop resetado.")
+                logging.info("[TRAILING] Não está comprado. Trailing stop resetado.")
+                return False
+
+            close_price = self.stock_data["close_price"].iloc[-1]
+            last_buy_price = self.last_buy_price
+
+            # Calcula o high_price desde a última compra
+            if self.last_buy_time is not None:
+                # Filtra dados desde a última compra
+                prices_since_buy = self.stock_data[self.stock_data["open_time"] >= self.last_buy_time]
+                if not prices_since_buy.empty:
+                    high_since_buy = prices_since_buy["high_price"].max()
+                else:
+                    # Fallback: usa preço atual se não há dados desde a compra
+                    high_since_buy = max(close_price, self.last_buy_price)
+            else:
+                # Fallback: usa o máximo entre preço atual e preço de compra
+                high_since_buy = max(close_price, self.last_buy_price)
+
+            # Inicialização do trailing após compra ou ressincronização
+            if (not self.trailing_is_running) or (self.last_buy_price != self.last_buy_price_for_trailing):
+                self.max_price_since_buy = high_since_buy
+                self.trailing_stop_price = self.adjust_to_step(
+                    self.max_price_since_buy * (1 - self.trailing_stop_percent), self.tick_size, as_string=False
+                )
+                self.trailing_is_running = True  # Agora está rodando
+                self.last_buy_price_for_trailing = self.last_buy_price
+                self.save_trailing_state()
+                msg = f"\n[TRAILING] Iniciado em {self.max_price_since_buy:.4f}. Stop em {self.trailing_stop_price:.4f} (-{self.trailing_stop_percent*100:.2f}%)"
+                print(msg)
+                logging.info(msg)
+                return False
+
+            # Atualiza a máxima desde a compra
+            if high_since_buy > self.max_price_since_buy:
+                self.max_price_since_buy = high_since_buy
+                self.trailing_stop_price = self.adjust_to_step(
+                    self.max_price_since_buy * (1 - self.trailing_stop_percent), self.tick_size, as_string=False
+                )
+                self.save_trailing_state()
+                msg = f"\n[TRAILING] Novo topo: {self.max_price_since_buy:.4f}. Novo stop: {self.trailing_stop_price:.4f} (-{self.trailing_stop_percent*100:.2f}%)"
+                print(msg)
+                logging.info(msg)
+
+            # Atualiza o stop se o percentual mudou, mesmo sem novo topo
+            new_trailing_stop_price = self.adjust_to_step(
+                self.max_price_since_buy * (1 - self.trailing_stop_percent), self.tick_size, as_string=False
+            )
+            if self.trailing_stop_price != new_trailing_stop_price:
+                self.trailing_stop_price = new_trailing_stop_price
+                self.save_trailing_state()
+                msg = f"\n[TRAILING] Percentual alterado. Novo stop: {self.trailing_stop_price:.4f} (-{self.trailing_stop_percent*100:.2f}%)"
+                print(msg)
+                logging.info(msg)
+
+            # Se cair e atingir o trailing stop, vende
+            if close_price <= self.trailing_stop_price:
+                msg = f"\n[TRAILING] Stop atingido: {close_price:.4f} <= {self.trailing_stop_price:.4f} (-{self.trailing_stop_percent*100:.2f}%). Vendendo..."
+                print(msg)
+                logging.warning(msg)
+                self.cancelAllOrders()
+                time.sleep(2)
+                result = self.sellMarketOrder()
+                self.trailing_is_running = False  # Para de rodar após venda
+                self.last_buy_time = None  # Reset timestamp
+                self.save_trailing_state()
+                self.reset_trailing_state()  # Limpa estado após a venda total
+                logging.info(f"\n[TRAILING] Venda executada: {result}")
+                return True
+            else:
+                msg = f" - Trailing stop em: {self.trailing_stop_price:.4f} (-{self.trailing_stop_percent*100:.2f}%)"
+                print(msg)
+                logging.info(msg)
+                return False  # Não ativou o trailing stop ainda
+        except Exception as e:
+            print(f"\n[TRAILING][ERRO] {e}")
+            logging.error(f"\n[TRAILING][ERRO] {e}")
+            return False
 
     # --------------------------------------------------------------
 
@@ -993,20 +1185,39 @@ class BinanceTraderBot:
         print("\n-------")
         print("Detalhes:")
         print(f' - Posição atual: {"Comprado" if self.actual_trade_position else "Vendido"}')
-        print(f" - Balanço atual: {self.last_stock_account_balance:.4f} ({self.stock_code})")
+        print(f" - Balanço atual: {self.last_stock_account_balance:.4f} ({self.base_stock})")
 
         # ---------
         # Estratégias sentinelas de saída
+
+        # Paused Bot
+        if self.pause_bot_state:
+            print("\n🔴 Bot pausado. Aguardando reinício...\n")
+            return
 
         # Stop Loss
         # Se perder mais que o stop loss aceitável, ele sai à mercado, independente.
         if self.stopLossTrigger():
             print("\n🟢 STOP LOSS finalizado.\n")
+            if self.pause_after_stop_loss:
+                print("\n⏸️  Pausando bot após STOP LOSS.\n")
+                self.pause_bot_state = True
+            return
+
+        # TRAILING STOP
+        if self.actual_trade_position == True and self.trailingStopTrigger():
+            print("\n🟢 TRAILING STOP finalizado.\n")
+            if self.pause_after_trailing_stop:
+                print("\n⏸️  Pausando bot após TRAILING STOP.\n")
+                self.pause_bot_state = True
             return
 
         # Take Profit
         if self.actual_trade_position == True and self.takeProfitTrigger():
             print("\n🟢 TAKE PROFIT finalizado.\n")
+            if self.pause_after_take_profit:
+                print("\n⏸️  Pausando bot após TAKE PROFIT.\n")
+                self.pause_bot_state = True
             return
 
         # ---------
@@ -1035,28 +1246,38 @@ class BinanceTraderBot:
 
         # ---------
         # Se a posição for vendida (false) e a decisão for de compra (true), compra o ativo
-        # Se a posição for comprada (true) e a decisão for de venda (false), vende o ativo
         if self.actual_trade_position == False and self.last_trade_decision == True:
-            print("🏁 Ação final: Comprar")
+            print(f"🏁 Ação final: Comprar {'a Mercado' if self.execute_market_orders else 'a Limite'}")
             print("--------------")
-            print(f"\nCarteira em {self.stock_code} [ANTES]:")
+            print(f"\nCarteira em {self.base_stock} [ANTES]:")
             self.printStock()
-            self.buyLimitedOrder()
+
+            if self.execute_market_orders == True:
+                self.buyMarketOrder()
+            else:
+                self.buyLimitedOrder()
+
             time.sleep(2)
             self.updateAllData()
-            print(f"Carteira em {self.stock_code} [DEPOIS]:")
+            print(f"Carteira em {self.base_stock} [DEPOIS]:")
             self.printStock()
             self.time_to_sleep = self.delay_after_order
 
+        # Se a posição for comprada (true) e a decisão for de venda (false), vende o ativo
         elif self.actual_trade_position == True and self.last_trade_decision == False:
-            print("🏁 Ação final: Vender")
+            print(f"🏁 Ação final: Vender {'a Mercado' if self.execute_market_orders else 'a Limite'}")
             print("--------------")
-            print(f"\nCarteira em {self.stock_code} [ANTES]:")
+            print(f"\nCarteira em {self.base_stock} [ANTES]:")
             self.printStock()
-            self.sellLimitedOrder()
+
+            if self.execute_market_orders == True:
+                self.sellMarketOrder()
+            else:
+                self.sellLimitedOrder()
+
             time.sleep(2)
             self.updateAllData()
-            print(f"\nCarteira em {self.stock_code} [DEPOIS]:")
+            print(f"\nCarteira em {self.base_stock} [DEPOIS]:")
             self.printStock()
             self.time_to_sleep = self.delay_after_order
 

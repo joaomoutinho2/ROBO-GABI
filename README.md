@@ -17,7 +17,7 @@ Siga para conhecer mais o trabalho:
 
     Digite no terminal (abra o terminal com ctrl+J):
 
-    pip install pandas python-binance python-dotenv
+    pip install -r requirements.txt
 
 # 2. Insira suas chaves da Binance no documento .env
 
@@ -35,24 +35,27 @@ Siga para conhecer mais o trabalho:
 
 # 4. Configure o bot e suas variáveis
 
-    Agora a configuração é feita no arquivo .\src\main.py
+    Toda a configuração é feita no arquivo .\src\main.py
 
 # 5. Código para rodar o bot
 
     Digite no terminal:
 
-    python .\src\main.py
+    python -m src.main
 
 # 6. Código para rodar os backtests
 
     Digite no terminal:
 
-    python .\src\backtests.py
+    python -m src.backtests
 
 # 7. Termos de Uso
 
     Ao usar o código você aceita os termos disponíveis no arquivo LICENSE.
 
-    Além da licença de distribuição, o robô/código é disponibilizado para uso sob sua total responsabilidade, sem que os desenvolvedores assumam qualquer responsabilidade por perdas financeiras ou outros danos decorrentes de seu uso.
+    Além da licença de distribuição, o bot é disponibilizado para uso
+    sob sua total responsabilidade, sem que os desenvolvedores assumam
+    qualquer responsabilidade por perdas financeiras ou outros danos
+    decorrentes de seu uso.
 
-    Negocie com responsabilidade
+    Opere com responsabilidade. Apenas para maiores de 18 anos.

@@ -1,32 +1,32 @@
 import logging
 from datetime import datetime
 
-# Configurar o logger
-logging.basicConfig(
-    filename='src/logs/trading_bot.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# # Configurar o logger
+# logging.basicConfig(
+#     filename='src/logs/trading_bot.log',
+#     level=logging.INFO,
+#     format='%(asctime)s - %(levelname)s - %(message)s'
+# )
+
 
 # Printa e cria um log de ordem de compra ou venda.
 # a partir do objeto retornado pela API da Binance
 def createLogOrder(order):
     # Extraindo as informações necessárias
-    side = order['side']
-    type = order['type']
-    quantity = order['executedQty']
-    asset = order['symbol']
-    total_value = order['cummulativeQuoteQty']
-    timestamp = order['transactTime']
-    status = order['status']
-    price = order['price']
+    side = order["side"]
+    type = order["type"]
+    quantity = order["executedQty"]
+    asset = order["symbol"]
+    total_value = order["cummulativeQuoteQty"]
+    timestamp = order["transactTime"]
+    status = order["status"]
+    price = order["price"]
 
-    price_per_unit = order.get('fills', [{}])[0].get('price', '-') if order.get('fills') else '-'
-    currency = order.get('fills', [{}])[0].get('commissionAsset', '-') if order.get('fills') else '-'
-
+    price_per_unit = order.get("fills", [{}])[0].get("price", "-") if order.get("fills") else "-"
+    currency = order.get("fills", [{}])[0].get("commissionAsset", "-") if order.get("fills") else "-"
 
     # Convertendo timestamp para data/hora legível
-    datetime_transact = datetime.utcfromtimestamp(timestamp / 1000).strftime('(%H:%M:%S) %Y-%m-%d')
+    datetime_transact = datetime.utcfromtimestamp(timestamp / 1000).strftime("(%H:%M:%S) %Y-%m-%d")
 
     # Criando as mensagens para log
     log_message = (
@@ -74,6 +74,7 @@ def createLogOrder(order):
     # Registrando no log
     logging.info(log_message)
 
+
 # # Exemplo de uso
 # if __name__ == "__main__":
 #     order_sell = {
@@ -112,8 +113,7 @@ def getOrderStatus(order_status):
         "PARTIALLY_FILLED": "PARCIALMENTE EXECUTADA",
         "FILLED": "EXECUTADA",
         "CANCELED": "CANCELADA",
-        "EXPIRED": "EXPIRADA"
+        "EXPIRED": "EXPIRADA",
     }
 
     return status_translation.get(order_status, "ERRO")
-    

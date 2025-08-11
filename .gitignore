@@ -4,6 +4,9 @@ src/logs/trading_bot.log
 src/logs/*.log
 /src/logs/*.log
 
+src/logs/*.txt
+/src/logs/*.txt
+
 
 
 # Byte-compiled / optimized / DLL files

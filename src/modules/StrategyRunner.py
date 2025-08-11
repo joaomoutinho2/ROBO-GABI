@@ -1,3 +1,6 @@
+import inspect
+
+
 class StrategyRunner:
 
     @staticmethod
@@ -18,6 +21,11 @@ class StrategyRunner:
         main_strategy_args = main_strategy_args or {}  # Se não for passado, usa um dicionário vazio
         main_strategy_args["stock_data"] = stock_data  # stock_data sempre será passado
         main_strategy_args["verbose"] = verbose
+
+        # Verifica se main_strategy aceita 'self'
+        sig_main = inspect.signature(main_strategy)
+        if "self" in sig_main.parameters:
+            main_strategy_args["self"] = self
 
         # Executa a estratégia principal
         final_decision = main_strategy(**main_strategy_args)

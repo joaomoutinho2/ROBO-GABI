@@ -121,43 +121,43 @@ DELAY_ENTRE_ORDENS = 10 * 60  # Tempo que o bot espera depois de realizar uma or
 
 XRP_USDT = StockStartModel(  baseStock = "XRP",
                             quoteStock = "USDT",
-                            tradedQuantity = 3,
+                            tradedQuantity = 10,
                             mainStrategy = MAIN_STRATEGY, mainStrategyArgs = MAIN_STRATEGY_ARGS, fallbackStrategy = FALLBACK_STRATEGY, fallbackStrategyArgs = FALLBACK_STRATEGY_ARGS,
                             candlePeriod = CANDLE_PERIOD, stopLossPercentage = STOP_LOSS_PERCENTAGE, tempoEntreTrades = TEMPO_ENTRE_TRADES, delayEntreOrdens = DELAY_ENTRE_ORDENS, acceptableLossPercentage = ACCEPTABLE_LOSS_PERCENTAGE, fallBackActivated= FALLBACK_ENABLED, takeProfitAtPercentage=TP_AT_PERCENTAGE, takeProfitAmountPercentage=TP_AMOUNT_PERCENTAGE, executeMarketOrders=EXECUTE_MARKET_ORDERS, trailingStopPercent=TRAILING_STOP_PERCENTAGE, trailingStopEnabled=TRAILING_STOP_ENABLED, pauseAfterTakeProfit=PAUSE_AFTER_TAKE_PROFIT, pauseAfterStopLoss=PAUSE_AFTER_STOP_LOSS, pauseAfterTrailingStop=PAUSE_AFTER_TRAILING_STOP)
 
 SOL_USDT = StockStartModel(  baseStock = "SOL",
                             quoteStock = "USDT",
-                            tradedQuantity = 0.1,
+                            tradedQuantity = 0.2,
                             mainStrategy = MAIN_STRATEGY, mainStrategyArgs = MAIN_STRATEGY_ARGS, fallbackStrategy = FALLBACK_STRATEGY, fallbackStrategyArgs = FALLBACK_STRATEGY_ARGS,
                             candlePeriod = CANDLE_PERIOD, stopLossPercentage = STOP_LOSS_PERCENTAGE, tempoEntreTrades = TEMPO_ENTRE_TRADES, delayEntreOrdens = DELAY_ENTRE_ORDENS, acceptableLossPercentage = ACCEPTABLE_LOSS_PERCENTAGE, fallBackActivated= FALLBACK_ENABLED, takeProfitAtPercentage=TP_AT_PERCENTAGE, takeProfitAmountPercentage=TP_AMOUNT_PERCENTAGE, executeMarketOrders=EXECUTE_MARKET_ORDERS, trailingStopPercent=TRAILING_STOP_PERCENTAGE, trailingStopEnabled=TRAILING_STOP_ENABLED, pauseAfterTakeProfit=PAUSE_AFTER_TAKE_PROFIT, pauseAfterStopLoss=PAUSE_AFTER_STOP_LOSS, pauseAfterTrailingStop=PAUSE_AFTER_TRAILING_STOP)
 
 ADA_USDT = StockStartModel(  baseStock = "ADA",
                             quoteStock = "USDT",
-                            tradedQuantity = 0,
+                            tradedQuantity = 30,
                             mainStrategy = MAIN_STRATEGY, mainStrategyArgs = MAIN_STRATEGY_ARGS, fallbackStrategy = FALLBACK_STRATEGY, fallbackStrategyArgs = FALLBACK_STRATEGY_ARGS,
                             candlePeriod = CANDLE_PERIOD, stopLossPercentage = STOP_LOSS_PERCENTAGE, tempoEntreTrades = TEMPO_ENTRE_TRADES, delayEntreOrdens = DELAY_ENTRE_ORDENS, acceptableLossPercentage = ACCEPTABLE_LOSS_PERCENTAGE, fallBackActivated= FALLBACK_ENABLED, takeProfitAtPercentage=TP_AT_PERCENTAGE, takeProfitAmountPercentage=TP_AMOUNT_PERCENTAGE, executeMarketOrders=EXECUTE_MARKET_ORDERS, trailingStopPercent=TRAILING_STOP_PERCENTAGE, trailingStopEnabled=TRAILING_STOP_ENABLED, pauseAfterTakeProfit=PAUSE_AFTER_TAKE_PROFIT, pauseAfterStopLoss=PAUSE_AFTER_STOP_LOSS, pauseAfterTrailingStop=PAUSE_AFTER_TRAILING_STOP)
 
 BTC_USDT = StockStartModel(  baseStock = "BTC",
                             quoteStock = "USDT",
-                            tradedQuantity = 0,
+                            tradedQuantity = 0.001,
                             mainStrategy = MAIN_STRATEGY, mainStrategyArgs = MAIN_STRATEGY_ARGS, fallbackStrategy = FALLBACK_STRATEGY, fallbackStrategyArgs = FALLBACK_STRATEGY_ARGS,
                             candlePeriod = CANDLE_PERIOD, stopLossPercentage = STOP_LOSS_PERCENTAGE, tempoEntreTrades = TEMPO_ENTRE_TRADES, delayEntreOrdens = DELAY_ENTRE_ORDENS, acceptableLossPercentage = ACCEPTABLE_LOSS_PERCENTAGE, fallBackActivated= FALLBACK_ENABLED, takeProfitAtPercentage=TP_AT_PERCENTAGE, takeProfitAmountPercentage=TP_AMOUNT_PERCENTAGE, executeMarketOrders=EXECUTE_MARKET_ORDERS, trailingStopPercent=TRAILING_STOP_PERCENTAGE, trailingStopEnabled=TRAILING_STOP_ENABLED, pauseAfterTakeProfit=PAUSE_AFTER_TAKE_PROFIT, pauseAfterStopLoss=PAUSE_AFTER_STOP_LOSS, pauseAfterTrailingStop=PAUSE_AFTER_TRAILING_STOP)
 
 JUP_USDT = StockStartModel(  baseStock = "JUP",
                             quoteStock = "USDT",
-                            tradedQuantity = 30,
+                            tradedQuantity = 40,
                             mainStrategy = MAIN_STRATEGY, mainStrategyArgs = MAIN_STRATEGY_ARGS, fallbackStrategy = FALLBACK_STRATEGY, fallbackStrategyArgs = FALLBACK_STRATEGY_ARGS,
                             candlePeriod = CANDLE_PERIOD, stopLossPercentage = STOP_LOSS_PERCENTAGE, tempoEntreTrades = TEMPO_ENTRE_TRADES, delayEntreOrdens = DELAY_ENTRE_ORDENS, acceptableLossPercentage = ACCEPTABLE_LOSS_PERCENTAGE, fallBackActivated= FALLBACK_ENABLED, takeProfitAtPercentage=TP_AT_PERCENTAGE, takeProfitAmountPercentage=TP_AMOUNT_PERCENTAGE, executeMarketOrders=EXECUTE_MARKET_ORDERS, trailingStopPercent=TRAILING_STOP_PERCENTAGE, trailingStopEnabled=TRAILING_STOP_ENABLED, pauseAfterTakeProfit=PAUSE_AFTER_TAKE_PROFIT, pauseAfterStopLoss=PAUSE_AFTER_STOP_LOSS, pauseAfterTrailingStop=PAUSE_AFTER_TRAILING_STOP)
 
 ETH_USDT = StockStartModel(  baseStock = "ETH",
                             quoteStock = "USDT",
-                            tradedQuantity = 0.00,
+                            tradedQuantity = 0.02,
                             mainStrategy = MAIN_STRATEGY, mainStrategyArgs = MAIN_STRATEGY_ARGS, fallbackStrategy = FALLBACK_STRATEGY, fallbackStrategyArgs = FALLBACK_STRATEGY_ARGS,
                             candlePeriod = CANDLE_PERIOD, stopLossPercentage = STOP_LOSS_PERCENTAGE, tempoEntreTrades = TEMPO_ENTRE_TRADES, delayEntreOrdens = DELAY_ENTRE_ORDENS, acceptableLossPercentage = ACCEPTABLE_LOSS_PERCENTAGE, fallBackActivated= FALLBACK_ENABLED, takeProfitAtPercentage=TP_AT_PERCENTAGE, takeProfitAmountPercentage=TP_AMOUNT_PERCENTAGE, executeMarketOrders=EXECUTE_MARKET_ORDERS, trailingStopPercent=TRAILING_STOP_PERCENTAGE, trailingStopEnabled=TRAILING_STOP_ENABLED, pauseAfterTakeProfit=PAUSE_AFTER_TAKE_PROFIT, pauseAfterStopLoss=PAUSE_AFTER_STOP_LOSS, pauseAfterTrailingStop=PAUSE_AFTER_TRAILING_STOP)
 
 
 # ⤵️ Array que DEVE CONTER as moedas que serão negociadas
-stocks_traded_list = [JUP_USDT]
+stocks_traded_list = [XRP_USDT, SOL_USDT, JUP_USDT, ADA_USDT, BTC_USDT, ETH_USDT]
 
 THREAD_LOCK = True # True = Executa 1 moeda por vez | False = Executa todas simultânemaente
 

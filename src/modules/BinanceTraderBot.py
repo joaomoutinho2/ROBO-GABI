@@ -282,6 +282,10 @@ class BinanceTraderBot:
         # prices["open_time"] = prices["open_time"].dt.tz_convert("America/Sao_Paulo")
         # CÁLCULOS PRÉVIOS...
 
+        # ...antes de chamar a estratégia...
+        prices.columns = [col.lower() for col in prices.columns]
+        # ...chamada da estratégia...
+
         return prices
 
     # Retorna o preço da última ordem de compra executada para o ativo configurado.

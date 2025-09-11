@@ -284,6 +284,13 @@ class BinanceTraderBot:
 
         # ...antes de chamar a estratégia...
         prices.columns = [col.lower() for col in prices.columns]
+        # Renomeia para os nomes esperados pela estratégia de Pivot Points
+        prices = prices.rename(columns={
+            'high_price': 'high',
+            'low_price': 'low',
+            'close_price': 'close',
+            'open_price': 'open'
+        })
         # ...chamada da estratégia...
 
         return prices
@@ -582,10 +589,10 @@ class BinanceTraderBot:
         self,
         price=0,
     ):
-        close_price = self.stock_data["close_price"].iloc[-1]
+        close_price = self.stock_data["close"].iloc[-1]
         volume = self.stock_data["volume"].iloc[-1]  # Volume atual do mercado
         avg_volume = self.stock_data["volume"].rolling(window=20).mean().iloc[-1]  # Média de volume
-        rsi = Indicators.getRSI(series=self.stock_data["close_price"])  # RSI para ajuste
+        rsi = Indicators.getRSI(series=self.stock_data["close"])  # RSI para ajuste
 
         if price == 0:
             if rsi < 30:  # Mercado sobrevendido
@@ -696,10 +703,10 @@ class BinanceTraderBot:
         self,
         price=0,
     ):
-        close_price = self.stock_data["close_price"].iloc[-1]
+        close_price = self.stock_data["close"].iloc[-1]
         volume = self.stock_data["volume"].iloc[-1]  # Volume atual do mercado
         avg_volume = self.stock_data["volume"].rolling(window=20).mean().iloc[-1]  # Média de volume
-        rsi = Indicators.getRSI(series=self.stock_data["close_price"])
+        rsi = Indicators.getRSI(series=self.stock_data["close"])
 
         if price == 0:
             if rsi > 70:  # Mercado sobrecomprado
@@ -957,11 +964,11 @@ class BinanceTraderBot:
 
     # Estratégia de venda por "Stop Loss"
     def stopLossTrigger(self):
-        close_price = self.stock_data["close_price"].iloc[-1]
-        weighted_price = self.stock_data["close_price"].iloc[-2]  # Preço ponderado pelo candle anterior
+        close_price = self.stock_data["close"].iloc[-1]
+        weighted_price = self.stock_data["close"].iloc[-2]  # Preço ponderado pelo candle anterior
         stop_loss_price = self.last_buy_price * (1 - self.stop_loss_percentage)
 
-        print(f'\n - Preço atual: {self.stock_data["close_price"].iloc[-1]}')
+        print(f'\n - Preço atual: {self.stock_data["close"].iloc[-1]}')
         print(f" - Preço mínimo para vender: {self.getMinimumPriceToSell()}")
         print(f" - Stop Loss em: {stop_loss_price:.4f} (-{self.stop_loss_percentage*100:.2f}%)")
 
@@ -983,7 +990,7 @@ class BinanceTraderBot:
 
         try:
             # Obtém o preço de fechamento mais recente
-            close_price = self.stock_data["close_price"].iloc[-1]
+            close_price = self.stock_data["close"].iloc[-1]
 
             # Calcula a variação percentual do preço
             price_percentage_variation = self.getPriceChangePercentage(initial_price=self.last_buy_price, close_price=close_price)
@@ -1070,7 +1077,7 @@ class BinanceTraderBot:
                 logging.info("[TRAILING] Não está comprado. Trailing stop resetado.")
                 return False
 
-            close_price = self.stock_data["close_price"].iloc[-1]
+            close_price = self.stock_data["close"].iloc[-1]
             last_buy_price = self.last_buy_price
 
             # Calcula o high_price desde a última compra
